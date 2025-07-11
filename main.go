@@ -2,6 +2,7 @@ package main
 
 import (
 	// "fmt"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -9,7 +10,13 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"github.com/troyboy95/RSS-project-test/internal/database"
 )
+
+type apiConfig struct {
+	DB *database.Queries
+}
 
 func main() {
 	// fmt.Println("Hello, World!")
@@ -19,6 +26,20 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		log.Fatal("PORT environment variable is not found!")
+	}
+
+	db := os.Getenv("DB_URL")
+	if db == "" {
+		log.Fatal("DB_URL environment variable is not found!")
+	}
+
+	conn, err := sql.Open("postgres", db)
+	if err != nil {
+		log.Fatal("Error connecting to the database:", err)
+	}
+
+	apiCfg := apiConfig{
+		DB: database.New(conn),
 	}
 
 	router := chi.NewRouter()
