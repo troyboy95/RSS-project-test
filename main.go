@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
@@ -20,7 +21,11 @@ type apiConfig struct {
 
 func main() {
 	// fmt.Println("Hello, World!")
-
+	// feed, err := urlToFeed("https://wagslane.dev/index.xml")
+	// if err != nil {
+	// 	log.Fatal("Error fetching RSS feed:", err)
+	// }
+	// log.Println("Fetched feed:", feed)
 	godotenv.Load(".env")
 
 	port := os.Getenv("PORT")
@@ -38,9 +43,12 @@ func main() {
 		log.Fatal("Error connecting to the database:", err)
 	}
 
+	dbConn := database.New(conn)
 	apiCfg := apiConfig{
-		DB: database.New(conn),
+		DB: dbConn,
 	}
+
+	go startScraper(dbConn, 10, time.Minute)
 
 	router := chi.NewRouter()
 
@@ -56,6 +64,16 @@ func main() {
 	v1Router := chi.NewRouter()
 	v1Router.Get("/ready", readinessHandler)
 	v1Router.Get("/error", handlerError)
+	v1Router.Post("/users", apiCfg.createUserHandler)
+	v1Router.Get("/users", apiCfg.MiddlewareAuth(apiCfg.getUserHandler))
+	v1Router.Post("/feeds", apiCfg.MiddlewareAuth(apiCfg.createFeedHandler))
+	v1Router.Get("/feeds", apiCfg.getFeedsHandler)
+
+	v1Router.Post("/feed_follows", apiCfg.MiddlewareAuth(apiCfg.createFeedFollowHandler))
+	v1Router.Get("/feed_follows", apiCfg.MiddlewareAuth(apiCfg.getFeedFollowsHandler))
+	v1Router.Delete("/feed_follows/{FeedFollowID}", apiCfg.MiddlewareAuth(apiCfg.deleteFeedFollowHandler))
+
+	v1Router.Get("/users/posts", apiCfg.MiddlewareAuth(apiCfg.getUserPostsHandler))
 
 	router.Mount("/v1", v1Router)
 
@@ -66,7 +84,7 @@ func main() {
 
 	log.Printf("Server is running on port: %v", port)
 
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	if err != nil {
 		log.Fatal("Error starting server:", err)
 	}
